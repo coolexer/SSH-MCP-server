@@ -1,18 +1,18 @@
 """
-Linux SSH клиент — bash shell с поддержкой нестандартных промптов.
+Linux SSH клиент — поддержка bash/zsh/fish.
+Запускаем явный bash с контролируемым промптом.
 """
 
 import asyncio
 import re
-from typing import Optional
 
 from .ssh_client import SSHSession
 
-# После нашего PS1='$ ' промпт будет просто "$ "
-# Но при первом подключении может быть любой fancy промпт
-# Используем широкий паттерн для первого чтения
-LINUX_PROMPT_INITIAL_RE = r"[\$#>]\s*$|└──>\s*$|»\s*$|❯\s*$"
-LINUX_PROMPT_SIMPLE_RE = r"^\$\s"  # после установки PS1='$ '
+MCP_PROMPT = "MCPSSH>"
+MCP_PROMPT_RE = r"MCPSSH>"
+
+# Широкий паттерн для первого промпта (любой shell включая zsh fancy)
+INITIAL_PROMPT_RE = r"[\$#>%]\s*$|└──>\s*$|»\s*$|❯\s*$"
 
 
 class LinuxSession(SSHSession):
@@ -21,27 +21,29 @@ class LinuxSession(SSHSession):
     def __init__(self):
         super().__init__()
         self.device_type = "linux"
-        self._prompt_re = LINUX_PROMPT_INITIAL_RE
+        self._prompt_re = INITIAL_PROMPT_RE
 
     @property
     def _prompt_pattern(self) -> str:
         return self._prompt_re
 
     async def _post_connect(self) -> None:
-        """Дождаться промпта и упростить его для надёжного парсинга."""
-        # Ждём любой промпт при первом подключении
-        await self._read_until(LINUX_PROMPT_INITIAL_RE, timeout=20)
+        """Дождаться любого промпта, запустить bash с нашим промптом."""
+        await self._read_until(INITIAL_PROMPT_RE, timeout=20)
 
-        # Устанавливаем простой промпт
-        await self._send("export PS1='MCPPROMPT$ '\n")
+        # Запускаем bash явно (работает из любого shell включая zsh/fish)
+        await self._send("bash --norc --noprofile\n")
+        await asyncio.sleep(0.8)
+
+        # Устанавливаем уникальный промпт + чистим окружение
+        await self._send(
+            f"PS1='{MCP_PROMPT} '; export PS1; export TERM=dumb; unset HISTFILE\n"
+        )
         await asyncio.sleep(0.5)
-        # Переключаемся на новый паттерн
-        self._prompt_re = r"MCPPROMPT\$\s"
-        await self._read_until(self._prompt_re, timeout=10)
 
-        # Чистим окружение
-        await self._send("export TERM=dumb; unset HISTFILE\n")
-        await self._read_until(self._prompt_re, timeout=5)
+        # Переключаемся на наш промпт
+        self._prompt_re = MCP_PROMPT_RE
+        await self._read_until(self._prompt_re, timeout=10)
 
     async def exec(self, command: str, timeout: float = 60.0) -> str:
         """Выполнить shell-команду и вернуть вывод."""
