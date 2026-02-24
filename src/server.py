@@ -33,14 +33,7 @@ from typing import Any, Optional
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import (
-    CallToolRequest,
-    CallToolResult,
-    ListToolsRequest,
-    ListToolsResult,
-    TextContent,
-    Tool,
-)
+from mcp.types import TextContent, Tool
 
 from .session_manager import SessionManager
 
@@ -237,36 +230,20 @@ TOOLS = [
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.list_tools()
-async def list_tools(request: ListToolsRequest) -> ListToolsResult:
-    return ListToolsResult(tools=TOOLS)
+async def list_tools() -> list[Tool]:
+    return TOOLS
 
 
 @app.call_tool()
-async def call_tool(request: CallToolRequest) -> CallToolResult:
-    name = request.params.name
-    args: dict[str, Any] = request.params.arguments or {}
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    args: dict[str, Any] = arguments or {}
 
     try:
         result = await _dispatch(name, args)
-        return CallToolResult(
-            content=[TextContent(type="text", text=_to_text(result))]
-        )
-    except KeyError as e:
-        return CallToolResult(
-            content=[TextContent(type="text", text=f"Error: {e}")],
-            isError=True,
-        )
-    except TimeoutError as e:
-        return CallToolResult(
-            content=[TextContent(type="text", text=f"Timeout: {e}")],
-            isError=True,
-        )
+        return [TextContent(type="text", text=_to_text(result))]
     except Exception as e:
         logger.exception(f"Tool '{name}' failed")
-        return CallToolResult(
-            content=[TextContent(type="text", text=f"Error: {type(e).__name__}: {e}")],
-            isError=True,
-        )
+        return [TextContent(type="text", text=f"Error: {type(e).__name__}: {e}")]
 
 
 def _to_text(obj: Any) -> str:
