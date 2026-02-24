@@ -297,13 +297,9 @@ async def _dispatch(name: str, args: dict) -> Any:
     if name == "ssh_send_raw":
         session = await sessions.get_session(args["session_id"])
         text = args["text"].encode().decode("unicode_escape")  # handle \n \x03 etc.
-        await session._send(text)
         wait = args.get("wait_seconds", 1.0)
-        await asyncio.sleep(wait)
-        # Drain whatever arrived
-        drained = session._buffer
-        session._buffer = ""
-        return {"sent": repr(text), "received": drained}
+        received = await session.send_raw(text, wait_seconds=wait)
+        return {"sent": repr(text), "received": received}
 
     if name == "linux_os_info":
         session = await sessions.get_session(args["session_id"])
