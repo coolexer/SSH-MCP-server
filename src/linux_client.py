@@ -32,7 +32,7 @@ class LinuxSession(SSHSession):
         await self._read_until(INITIAL_PROMPT_RE, timeout=20)
 
         # Запускаем bash явно (работает из любого shell включая zsh/fish)
-        await self._send("bash --norc --noprofile\n")
+        await self._send("env -i HOME=$HOME USER=$USER TERM=dumb bash --norc --noprofile\n")
         await asyncio.sleep(0.8)
 
         # Устанавливаем уникальный промпт + чистим окружение
